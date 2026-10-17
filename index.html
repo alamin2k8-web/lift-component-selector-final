@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lift Component Selector</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1d2330; --muted: #5d6677;
+    --border: #d9dde5; --accent: #1f5fd1; --accent-soft: #e6eefc; --warn: #8a5a00; --warn-bg: #fff4d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --card: #1b2029; --text: #e8ebf1; --muted: #9aa4b5;
+      --border: #2d3442; --accent: #6b9bf0; --accent-soft: #1f2a43; --warn: #f0c36a; --warn-bg: #3a2f14;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  main { max-width: 1000px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: .95rem; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  label { display: block; font-size: .8rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .03em; }
+  input, select { width: 100%; padding: 10px 12px; font-size: 1rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .notice { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; font-size: .92rem; }
+  .empty { color: var(--muted); text-align: center; padding: 28px 8px; }
+  .result h2 { font-size: 1.05rem; margin: 0 0 2px; }
+  .tags { color: var(--muted); font-size: .88rem; margin-bottom: 12px; }
+  .group { margin-top: 14px; }
+  .group h3 { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); margin: 0 0 6px; }
+  dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; margin: 0; }
+  .item { background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; }
+  .item dt { font-size: .74rem; color: var(--muted); margin: 0; }
+  .item dd { margin: 2px 0 0; font-weight: 600; font-size: 1rem; }
+  .actions { display: flex; gap: 8px; margin-top: 14px; }
+  button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; font-size: .9rem; }
+  button:hover { border-color: var(--accent); }
+  footer { color: var(--muted); font-size: .8rem; text-align: center; margin-top: 24px; }
+  @media print { .inputs, .actions, footer { display: none; } body { background: #fff; color: #000; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Lift Component Selector</h1>
+  <p class="sub">Enter lift capacity, speed and motor brand to get the motor, controller, AVR, ARD/UPS, brake resistor, cable and breaker.</p>
+
+  <section class="card">
+    <div class="inputs">
+      <div>
+        <label for="cap">Lift capacity (kg)</label>
+        <input id="cap" type="number" inputmode="numeric" min="1" step="1" list="capList" placeholder="e.g. 1000">
+        <datalist id="capList"></datalist>
+      </div>
+      <div>
+        <label for="spd">Speed (m/s)</label>
+        <select id="spd"></select>
+      </div>
+      <div>
+        <label for="brand">Motor brand</label>
+        <select id="brand"></select>
+      </div>
+    </div>
+  </section>
+
+  <div id="notice" class="notice" hidden></div>
+  <div id="out"></div>
+
+  <footer>Data source: <code>data/components.xlsx</code> &middot; <span id="count"></span> configurations</footer>
+</main>
+
+<script src="data.js"></script>
+<script>
+(function () {
+  "use strict";
+  var DATA = window.LIFT_DATA || [];
+  var $ = function (id) { return document.getElementById(id); };
+  var capEl = $("cap"), spdEl = $("spd"), brandEl = $("brand"), outEl = $("out"), noticeEl = $("notice");
+
+  var capacities = uniq(DATA.map(function (r) { return r.capacity; })).sort(num);
+  var speeds = uniq(DATA.map(function (r) { return r.speed; })).sort(num);
+  var brands = uniq(DATA.map(function (r) { return r.brand; })).sort();
+
+  $("count").textContent = DATA.length;
+  $("capList").innerHTML = capacities.map(function (c) { return '<option value="' + c + '">'; }).join("");
+  spdEl.innerHTML = speeds.map(function (s) { return '<option value="' + s + '">' + s + '</option>'; }).join("");
+
+  function uniq(a) { return a.filter(function (v, i) { return a.indexOf(v) === i; }); }
+  function num(a, b) { return a - b; }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function val(v) { return v === null || v === undefined || v === "" ? "&ndash;" : esc(v); }
+
+  // Capacity actually used for lookup: the exact value if it exists in the table,
+  // otherwise the next standard capacity above it (never down-size a lift).
+  function resolveCapacity(requested) {
+    if (!(requested > 0)) return null;
+    for (var i = 0; i < capacities.length; i++) if (capacities[i] >= requested) return capacities[i];
+    return null;
+  }
+
+  function refreshBrands() {
+    var cap = resolveCapacity(parseFloat(capEl.value));
+    var spd = parseFloat(spdEl.value);
+    var available = uniq(DATA.filter(function (r) {
+      return (cap === null || r.capacity === cap) && r.speed === spd;
+    }).map(function (r) { return r.brand; })).sort();
+    var prev = brandEl.value;
+    var opts = ['<option value="">All brands</option>'].concat(brands.map(function (b) {
+      var ok = available.indexOf(b) !== -1;
+      return '<option value="' + esc(b) + '"' + (ok ? "" : " disabled") + '>' + esc(b) + (ok ? "" : " (not available)") + '</option>';
+    }));
+    brandEl.innerHTML = opts.join("");
+    if (prev && available.indexOf(prev) !== -1) brandEl.value = prev;
+  }
+
+  var GROUPS = [
+    ["Motor", [["Motor model", "model"], ["Motor type", "motorType"], ["Motor power (kW)", "motorKw"], ["Motor rated current (A)", "motorAmp"]]],
+    ["Traction", [["Traction sheave dia (mm)", "sheaveDia"], ["Rope dia (mm)", "ropeDia"], ["Rope number", "ropeNum"], ["Roping", "roping"]]],
+    ["ARKEL controller", [["Recommended power (kW)", "arkelKw"], ["Recommended current", "arkelAmp"], ["UPS for ARKEL", "upsArkel"], ["Brake resistor", "brakeResArkel"]]],
+    ["NICE3000+ controller", [["Recommended power (kW)", "niceKw"], ["Recommended current", "niceAmp"], ["ARD for NICE3000+", "ardNice"], ["Brake resistor", "brakeResNice"]]],
+    ["Power supply", [["Recommended AVR (kVA)", "avr"], ["Main power cable", "cable"], ["SDB main breaker", "sdbBreaker"]]]
+  ];
+
+  function renderRow(r) {
+    var html = '<section class="card result"><h2>' + esc(r.brand) + " &ndash; " + esc(r.model) + '</h2>' +
+      '<div class="tags">' + esc(r.capacity) + ' kg &middot; ' + esc(r.speed) + ' m/s &middot; ' + esc(r.usage) +
+      ' &middot; Excel row ' + esc(r.row) + '</div>';
+    GROUPS.forEach(function (g) {
+      html += '<div class="group"><h3>' + g[0] + '</h3><dl>';
+      g[1].forEach(function (f) {
+        html += '<div class="item"><dt>' + f[0] + '</dt><dd>' + val(r[f[1]]) + '</dd></div>';
+      });
+      html += '</dl></div>';
+    });
+    return html + '<div class="actions"><button type="button" data-copy="' + r.row + '">Copy as text</button></div></section>';
+  }
+
+  function toText(r) {
+    var lines = [r.brand + " - " + r.model + " (" + r.capacity + " kg, " + r.speed + " m/s, " + r.usage + ")"];
+    GROUPS.forEach(function (g) {
+      g[1].forEach(function (f) { lines.push(g[0] + " / " + f[0] + ": " + (r[f[1]] == null ? "-" : r[f[1]])); });
+    });
+    return lines.join("\n");
+  }
+
+  function update() {
+    refreshBrands();
+    noticeEl.hidden = true;
+    var requested = parseFloat(capEl.value);
+    if (!(requested > 0)) {
+      outEl.innerHTML = '<div class="card empty">Enter a lift capacity to see the recommended components.</div>';
+      return;
+    }
+    var cap = resolveCapacity(requested);
+    if (cap === null) {
+      outEl.innerHTML = '<div class="card empty">' + esc(requested) + ' kg is above the largest capacity in the table (' +
+        capacities[capacities.length - 1] + ' kg). Please check with engineering.</div>';
+      return;
+    }
+    if (cap !== requested) {
+      noticeEl.hidden = false;
+      noticeEl.textContent = requested + " kg is not a standard capacity in the table. Showing the next standard capacity: " + cap + " kg.";
+    }
+    var spd = parseFloat(spdEl.value), brand = brandEl.value;
+    var rows = DATA.filter(function (r) {
+      return r.capacity === cap && r.speed === spd && (!brand || r.brand === brand);
+    });
+    if (!rows.length) {
+      outEl.innerHTML = '<div class="card empty">No configuration for ' + cap + ' kg at ' + spd + ' m/s' +
+        (brand ? ' with ' + esc(brand) : '') + '. Try another speed or brand.</div>';
+      return;
+    }
+    outEl.innerHTML = rows.map(renderRow).join("");
+  }
+
+  outEl.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-copy]");
+    if (!b) return;
+    var row = DATA.filter(function (r) { return String(r.row) === b.getAttribute("data-copy"); })[0];
+    if (row && navigator.clipboard) {
+      navigator.clipboard.writeText(toText(row)).then(function () {
+        b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy as text"; }, 1500);
+      });
+    }
+  });
+
+  capEl.addEventListener("input", update);
+  spdEl.addEventListener("change", update);
+  brandEl.addEventListener("change", update);
+
+  spdEl.value = "1";
+  update();
+})();
+</script>
+</body>
+</html>
